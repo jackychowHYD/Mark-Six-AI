@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import streamlit as st 
 import pandas as pd 
-import random 
+import numpy as np 
 import os
 
 # ==========================================
-# 1. System Setup & Database Initialization
+# 1. 系統設定與資料庫初始化
 # ==========================================
 BASE_DIR = "." 
 CSV_PATH = os.path.join(BASE_DIR, "marksix_history.csv")
@@ -17,14 +17,14 @@ if not os.path.exists(CSV_PATH):
     pd.DataFrame(columns=['DrawNo', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'Special']).to_csv(CSV_PATH, index=False)
 
 st.set_page_config(page_title="Mark Six AI Pro", layout="wide", page_icon="🍀") 
-st.title("🍀 終極六合彩 AI 多模型預測系統") 
+st.title("🍀 終極六合彩 AI 多模型預測系統 (NumPy 引擎加速版)") 
 st.info("⚠️ **系統免責聲明**：根據數學 nCr 計算，六合彩中頭獎機率為 1/13,983,816。期望值通常為負數，每次攪珠皆為獨立事件，本 AI 預測僅供參考，請量力而為。")
 
 # ==========================================
-# 2. Database Update Function
+# 2. 數據庫維護函式
 # ==========================================
 def update_csv(draw_no, numbers, special): 
-    # Unpack the 6 numbers to avoid indexing errors
+    # Tuple 解包避開索引錯誤
     n1, n2, n3, n4, n5, n6 = numbers
     new_data = pd.DataFrame([{ 
         'DrawNo': draw_no, 
@@ -41,47 +41,48 @@ def update_csv(draw_no, numbers, special):
     df.to_csv(CSV_PATH, index=False)
 
 # ==========================================
-# 3. AI Structure Filter (Odd/Even, etc.)
+# 3. 核心 AI 結構過濾器 (NumPy 廣播加速)
 # ==========================================
 def check_ai_structure(nums): 
-    odds = sum(1 for n in nums if n % 2 != 0)
+    # 【NumPy 加速】使用陣列廣播同時計算 6 個號碼的奇偶數，省去緩慢的 for 迴圈
+    odds = np.sum(nums % 2 != 0)
     
-    # Must have exactly 2, 3, or 4 odd numbers to pass
+    # 必須剛好有 2, 3 或 4 個奇數才算合格
     if odds not in (2, 3, 4):
         return False
         
     return True
 
 # ==========================================
-# 4. Weighted Probability Forecast Model
+# 4. 加權機率演算與預測模型 (NumPy 極速抽號)
 # ==========================================
 def get_weighted_forecast(period, apply_reverse, apply_wuxing, count): 
     df = pd.read_csv(CSV_PATH) 
-    weights = {i: 1.0 for i in range(1, 50)}
     
-    population = list(weights.keys())
-    weights_list = list(weights.values())
+    # 【NumPy 加速】建立 1 到 49 的 N 維陣列
+    population = np.arange(1, 50)
+    
+    # 建立權重陣列並將其標準化為機率 (確保總和為 1.0)
+    weights = np.ones(49)
+    weights_prob = weights / np.sum(weights)
     
     results = []
     for _ in range(count):
         while True:
-            drawn = []
-            while len(drawn) < 6:
-                # Use .pop() to safely extract the integer and avoid TypeErrors
-                n = random.choices(population, weights=weights_list, k=1).pop()
-                if n not in drawn:
-                    drawn.append(n)
+            # 【NumPy 加速】一次過抽出 6 個不重複的號碼，徹底消滅 while len < 6 迴圈
+            drawn = np.random.choice(population, size=6, replace=False, p=weights_prob)
             
-            # Verify the drawn numbers against the AI filter
+            # 交畀過濾器驗證
             if check_ai_structure(drawn):
                 drawn.sort()
-                results.append(drawn)
+                # 轉回標準 Python List 以方便顯示與儲存
+                results.append(drawn.tolist())
                 break
                 
     return results
 
 # ==========================================
-# 5. Streamlit Web Interface (UI)
+# 5. 網頁介面 (Streamlit UI)
 # ==========================================
 col1, col2 = st.columns((6, 7))
 
@@ -93,9 +94,8 @@ with col1:
         index=2 
     )
 
-    # ================= THE GENERATE BUTTON =================
     if st.button("🎲 立即生成 AI 預測號碼"):
-        with st.spinner("AI 正在高速運算與過濾中..."):
+        with st.spinner("🚀 NumPy 引擎高速運算中..."):
             predictions = get_weighted_forecast(200, False, False, 1)
             
             if predictions:
@@ -113,7 +113,6 @@ with col2:
     nums_input = st.text_input("6 個號碼 (以逗號分隔, 例: 6,14,22,28,42,45)") 
     spec = st.number_input("特別號", 1, 49, step=1)
 
-    # ================= THE SAVE BUTTON =================
     if st.button("💾 儲存最新開獎紀錄"):
         if draw_no and nums_input:
             try:
@@ -127,4 +126,4 @@ with col2:
             except ValueError:
                 st.error("⚠️ 號碼格式錯誤！請確保只輸入數字及逗號。")
         else:
-            st.warning("⚠️ 請填寫完整期數及號碼！"))
+            st.warning("⚠️ 請填寫完整期數及號碼！")
