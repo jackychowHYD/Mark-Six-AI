@@ -111,6 +111,24 @@ with col1:
         ("1. 完全隨機選號 (盲抽)", "2. 近 50 期 (捕捉短期旺門動量)", "3. 近 200 期 (捕捉長期均值頻率)"), 
         index=2 
     )
+    
+    # === 以下為外部知識補全的生成按鈕與顯示邏輯 ===
+    # 加入一個生成號碼嘅按鈕
+    if st.button("🎲 立即生成 AI 預測號碼"):
+        with st.spinner("AI 正在高速運算與過濾中..."):
+            # 呼叫之前寫好嘅 get_weighted_forecast 產生 1 組號碼
+            # (假設參數暫時為: 200期, 無反轉, 無五行, 產生1組)
+            predictions = get_weighted_forecast(200, False, False, 1)
+            
+            if predictions:
+                st.success("✅ 生成成功！為你篩選出符合歷史結構嘅號碼：")
+                # 將抽出的號碼漂亮地顯示出來
+                for i, draw_nums in enumerate(predictions):
+                    # 將數字變成兩位數格式 (例如 6 變成 06)
+                    display_nums = " - ".join([str(n).zfill(2) for n in draw_nums])
+                    st.markdown(f"### 🎯 推薦組合: [ {display_nums} ]")
+            else:
+                st.error("⚠️ AI 無法在短時間內搵到完美組合，請再撳一次！")
 
 with col2: 
     st.subheader("📥 餵養 AI 歷史資料庫") 
