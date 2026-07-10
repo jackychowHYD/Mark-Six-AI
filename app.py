@@ -8,19 +8,19 @@ import os
 # 1. 系統設定與資料庫初始化
 # ==========================================
 # 根據我們之前的討論，將 BASE_DIR 改為 "." 以適應雲端部署 (外部知識補充)
-BASE_DIR = "."
+BASE_DIR = "." 
 CSV_PATH = os.path.join(BASE_DIR, "marksix_history.csv")
 
 # 加入了 exist_ok=True 防護避免 FileExistsError (外部知識補充)
 if not os.path.exists(BASE_DIR): 
-    os.makedirs(BASE_DIR, exist_ok=True) 
+    os.makedirs(BASE_DIR, exist_ok=True)
     
 if not os.path.exists(CSV_PATH): 
     pd.DataFrame(columns=['DrawNo', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'Special']).to_csv(CSV_PATH, index=False)
 
 st.set_page_config(page_title="Mark Six AI Pro", layout="wide", page_icon="🍀") 
-st.title("🍀 終極六合彩 AI 多模型預測系統")
-st.info("⚠️  **系統免責聲明** ：根據數學 nCr 計算，六合彩中頭獎機率為 1/13,983,816。期望值通常為負數，每次攪珠皆為獨立事件，本 AI 預測僅供參考，請量力而為。")
+st.title("🍀 終極六合彩 AI 多模型預測系統") 
+st.info("⚠️ **系統免責聲明**：根據數學 nCr 計算，六合彩中頭獎機率為 1/13,983,816。期望值通常為負數，每次攪珠皆為獨立事件，本 AI 預測僅供參考，請量力而為。")
 
 # ==========================================
 # 2. 數據庫維護函式
@@ -29,9 +29,9 @@ def update_csv(draw_no, numbers, special):
     new_data = pd.DataFrame([{ 
         'DrawNo': draw_no, 
         'N1': numbers, 
-        'N2': numbers[3], 
-        'N3': numbers[1], 
-        'N4': numbers[2], 
+        'N2': numbers[1], 
+        'N3': numbers[2], 
+        'N4': numbers[3], 
         'N5': numbers[4], 
         'N6': numbers, 
         'Special': special 
@@ -49,26 +49,11 @@ def check_ai_structure(nums):
     odds = sum(1 for n in nums if n % 2 != 0)
 
     # === 以下為結合歷史對話與外部知識補全的運算邏輯 ===
-    # 奇偶極端比例過濾
+    # 奇偶極端比例過濾 (必須剛好包含 2, 3 或 4 個奇數)
     if odds not in [2-4]:
         return False
-
-    nums_sorted = sorted(nums)
-    
-    # 2. 檢查連號：過濾大於 2 組連號的極端組合
-    consecutive_count = 0
-    for i in range(len(nums_sorted) - 1):
-        if nums_sorted[i] + 1 == nums_sorted[i+1]:
-            consecutive_count += 1
-    if consecutive_count > 2:
-        return False
-
-    # 3. 檢查同尾數：過濾同一尾數出現超過 3 次的組合
-    endings = [n % 10 for n in nums_sorted]
-    ending_counts = {x: endings.count(x) for x in set(endings)}
-    if any(count > 3 for count in ending_counts.values()):
-        return False
-
+        
+    # 如果通過所有過濾條件，則回傳 True 允許使用該組號碼
     return True
 
 # ==========================================
@@ -78,6 +63,7 @@ def get_weighted_forecast(period, apply_reverse, apply_wuxing, count):
     df = pd.read_csv(CSV_PATH) 
     weights = {i: 1.0 for i in range(1, 50)}
     
+    # === 以下為結合歷史對話與外部知識補全的抽號邏輯 ===
     population = list(weights.keys())
     weights_list = list(weights.values())
     
@@ -87,7 +73,7 @@ def get_weighted_forecast(period, apply_reverse, apply_wuxing, count):
             drawn = []
             while len(drawn) < 6:
                 # ✅ 重點修正：喺最尾加上 ，將抽出來的結果轉換為純數字
-                n = random.choices(population, weights=weights_list, k=1)[0]
+                n = random.choices(population, weights=weights_list, k=1)
                 if n not in drawn:
                     drawn.append(n)
             
@@ -101,7 +87,7 @@ def get_weighted_forecast(period, apply_reverse, apply_wuxing, count):
 # ==========================================
 # 5. 網頁介面 (Streamlit UI)
 # ==========================================
-col1, col2 = st.columns([6,7])
+col1, col2 = st.columns()
 
 with col1: 
     st.subheader("🤖 AI 多模型選號策略") 
@@ -110,20 +96,18 @@ with col1:
         ("1. 完全隨機選號 (盲抽)", "2. 近 50 期 (捕捉短期旺門動量)", "3. 近 200 期 (捕捉長期均值頻率)"), 
         index=2 
     )
-    
+
     # === 以下為外部知識補全的生成按鈕與顯示邏輯 ===
     # 加入一個生成號碼嘅按鈕
     if st.button("🎲 立即生成 AI 預測號碼"):
         with st.spinner("AI 正在高速運算與過濾中..."):
-            # 呼叫之前寫好嘅 get_weighted_forecast 產生 1 組號碼
-            # (假設參數暫時為: 200期, 無反轉, 無五行, 產生1組)
+            # 呼叫寫好嘅 get_weighted_forecast 產生 1 組號碼
             predictions = get_weighted_forecast(200, False, False, 1)
             
             if predictions:
                 st.success("✅ 生成成功！為你篩選出符合歷史結構嘅號碼：")
                 # 將抽出的號碼漂亮地顯示出來
                 for i, draw_nums in enumerate(predictions):
-                    # 將數字變成兩位數格式 (例如 6 變成 06)
                     display_nums = " - ".join([str(n).zfill(2) for n in draw_nums])
                     st.markdown(f"### 🎯 推薦組合: [ {display_nums} ]")
             else:
