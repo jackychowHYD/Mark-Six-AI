@@ -47,10 +47,10 @@ def update_csv(draw_no, numbers, special):
 def check_ai_structure(nums): 
     # 1. 檢查奇偶比例 (歷史主流為 3:3, 4:2, 2:4) 
     odds = sum(1 for n in nums if n % 2 != 0)
-    
+
     # === 以下為結合歷史對話與外部知識補全的運算邏輯 ===
     # 奇偶極端比例過濾
-   if odds not in [1-3]:
+    if odds not in [2-4]:
         return False
 
     nums_sorted = sorted(nums)
