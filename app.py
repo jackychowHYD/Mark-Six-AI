@@ -50,7 +50,7 @@ def check_ai_structure(nums):
     
     # === 以下為結合歷史對話與外部知識補全的運算邏輯 ===
     # 奇偶極端比例過濾
-    if odds not in [2-4]:
+   if odds not in [1-3]:
         return False
 
     nums_sorted = sorted(nums)
