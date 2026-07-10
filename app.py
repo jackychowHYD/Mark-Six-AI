@@ -103,7 +103,7 @@ def get_weighted_forecast(period, apply_reverse, apply_wuxing, count):
 # ==========================================
 # 5. 網頁介面 (Streamlit UI)
 # ==========================================
-col1, col2 = st.columns()
+col1, col2 = st.columns(``)
 
 with col1: 
     st.subheader("🤖 AI 多模型選號策略") 
