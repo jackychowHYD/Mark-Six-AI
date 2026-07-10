@@ -87,7 +87,7 @@ def get_weighted_forecast(period, apply_reverse, apply_wuxing, count):
             drawn = []
             while len(drawn) < 6:
                 # ✅ 重點修正：喺最尾加上 ，將抽出來的結果轉換為純數字
-                n = random.choices(population, weights=weights_list, k=1)
+                n = random.choices(population, weights=weights_list, k=1)[0]
                 if n not in drawn:
                     drawn.append(n)
             
