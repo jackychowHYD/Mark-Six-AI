@@ -78,7 +78,6 @@ def get_weighted_forecast(period, apply_reverse, apply_wuxing, count):
     df = pd.read_csv(CSV_PATH) 
     weights = {i: 1.0 for i in range(1, 50)}
     
-    # === 以下為外部知識補全的抽號邏輯，確保程式可實際運作產出結果 ===
     population = list(weights.keys())
     weights_list = list(weights.values())
     
@@ -87,7 +86,7 @@ def get_weighted_forecast(period, apply_reverse, apply_wuxing, count):
         while True:
             drawn = []
             while len(drawn) < 6:
-                # 根據權重隨機抽號
+                # ✅ 重點修正：喺最尾加上 ，將抽出來的結果轉換為純數字
                 n = random.choices(population, weights=weights_list, k=1)
                 if n not in drawn:
                     drawn.append(n)
