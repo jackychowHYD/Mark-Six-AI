@@ -5,7 +5,7 @@ import random
 import os
 
 # ==========================================
-# 1. 系統設定與資料庫初始化
+# 1. System Setup & Database Initialization
 # ==========================================
 BASE_DIR = "." 
 CSV_PATH = os.path.join(BASE_DIR, "marksix_history.csv")
@@ -21,10 +21,10 @@ st.title("🍀 終極六合彩 AI 多模型預測系統")
 st.info("⚠️ **系統免責聲明**：根據數學 nCr 計算，六合彩中頭獎機率為 1/13,983,816。期望值通常為負數，每次攪珠皆為獨立事件，本 AI 預測僅供參考，請量力而為。")
 
 # ==========================================
-# 2. 數據庫維護函式
+# 2. Database Update Function
 # ==========================================
 def update_csv(draw_no, numbers, special): 
-    # 完美解法：直接將 6 個號碼拆解為 n1 至 n6，避免所有索引錯誤
+    # Unpack the 6 numbers to avoid indexing errors
     n1, n2, n3, n4, n5, n6 = numbers
     new_data = pd.DataFrame([{ 
         'DrawNo': draw_no, 
@@ -41,19 +41,19 @@ def update_csv(draw_no, numbers, special):
     df.to_csv(CSV_PATH, index=False)
 
 # ==========================================
-# 3. 核心 AI 結構過濾器 (連號、奇偶、同尾數)
+# 3. AI Structure Filter (Odd/Even, etc.)
 # ==========================================
 def check_ai_structure(nums): 
     odds = sum(1 for n in nums if n % 2 != 0)
     
-    # 必須剛好有 2, 3 或 4 個奇數才算合格
+    # Must have exactly 2, 3, or 4 odd numbers to pass
     if odds not in (2, 3, 4):
         return False
         
     return True
 
 # ==========================================
-# 4. 加權機率演算與預測模型
+# 4. Weighted Probability Forecast Model
 # ==========================================
 def get_weighted_forecast(period, apply_reverse, apply_wuxing, count): 
     df = pd.read_csv(CSV_PATH) 
@@ -67,11 +67,12 @@ def get_weighted_forecast(period, apply_reverse, apply_wuxing, count):
         while True:
             drawn = []
             while len(drawn) < 6:
-                # 使用 .pop() 取出單一數字，徹底解決 TypeError
+                # Use .pop() to safely extract the integer and avoid TypeErrors
                 n = random.choices(population, weights=weights_list, k=1).pop()
                 if n not in drawn:
                     drawn.append(n)
             
+            # Verify the drawn numbers against the AI filter
             if check_ai_structure(drawn):
                 drawn.sort()
                 results.append(drawn)
@@ -80,7 +81,7 @@ def get_weighted_forecast(period, apply_reverse, apply_wuxing, count):
     return results
 
 # ==========================================
-# 5. 網頁介面 (Streamlit UI)
+# 5. Streamlit Web Interface (UI)
 # ==========================================
 col1, col2 = st.columns((6, 7))
 
@@ -92,7 +93,7 @@ with col1:
         index=2 
     )
 
-    # ================= 此為你遺漏的生成按鈕 =================
+    # ================= THE GENERATE BUTTON YOU WERE MISSING =================
     if st.button("🎲 立即生成 AI 預測號碼"):
         with st.spinner("AI 正在高速運算與過濾中..."):
             predictions = get_weighted_forecast(200, False, False, 1)
@@ -112,7 +113,7 @@ with col2:
     nums_input = st.text_input("6 個號碼 (以逗號分隔, 例: 6,14,22,28,42,45)") 
     spec = st.number_input("特別號", 1, 49, step=1)
 
-    # ================= 此為你遺漏的儲存按鈕 =================
+    # ================= THE SAVE BUTTON YOU WERE MISSING =================
     if st.button("💾 儲存最新開獎紀錄"):
         if draw_no and nums_input:
             try:
