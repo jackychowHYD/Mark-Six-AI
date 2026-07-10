@@ -93,7 +93,7 @@ with col1:
         index=2 
     )
 
-    # ================= THE GENERATE BUTTON YOU WERE MISSING =================
+    # ================= THE GENERATE BUTTON =================
     if st.button("🎲 立即生成 AI 預測號碼"):
         with st.spinner("AI 正在高速運算與過濾中..."):
             predictions = get_weighted_forecast(200, False, False, 1)
@@ -113,7 +113,7 @@ with col2:
     nums_input = st.text_input("6 個號碼 (以逗號分隔, 例: 6,14,22,28,42,45)") 
     spec = st.number_input("特別號", 1, 49, step=1)
 
-    # ================= THE SAVE BUTTON YOU WERE MISSING =================
+    # ================= THE SAVE BUTTON =================
     if st.button("💾 儲存最新開獎紀錄"):
         if draw_no and nums_input:
             try:
@@ -127,4 +127,4 @@ with col2:
             except ValueError:
                 st.error("⚠️ 號碼格式錯誤！請確保只輸入數字及逗號。")
         else:
-            st.warning("⚠️ 請填寫完整期數及號碼！")
+            st.warning("⚠️ 請填寫完整期數及號碼！"))
