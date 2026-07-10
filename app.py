@@ -118,3 +118,22 @@ with col2:
     draw_no = st.text_input("期數 (例: 26/072)") 
     nums = st.text_input("6 個號碼 (以逗號分隔, 例: 6,14,22,28,42,45)") 
     spec = st.number_input("特別號", 1, 49, step=1)
+
+    # === 以下為外部知識補全的儲存按鈕與觸發邏輯 ===
+    if st.button("💾 儲存最新開獎紀錄"):
+        if draw_no and nums:
+            try:
+                # 將輸入嘅字串 "6,14,22..." 轉換成整數列表 [6, 14, 22...]
+                num_list = [int(x.strip()) for x in nums.split(',')]
+                
+                # 檢查是否剛好輸入咗 6 個號碼
+                if len(num_list) == 6:
+                    # 呼叫你寫好嘅 update_csv 函式去更新資料庫
+                    update_csv(draw_no, num_list, spec)
+                    st.success(f"✅ 第 {draw_no} 期紀錄已成功儲存！")
+                else:
+                    st.error("⚠️ 請確保剛好輸入 6 個號碼，並以逗號分隔。")
+            except ValueError:
+                st.error("⚠️ 號碼格式錯誤！請確保只輸入數字及逗號。")
+        else:
+            st.warning("⚠️ 請填寫完整期數及號碼！")
