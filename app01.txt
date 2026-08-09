@@ -1,0 +1,183 @@
+# -*- coding: utf-8 -*-
+import streamlit as st
+import pandas as pd
+import random
+import os
+import io
+
+# ==========================================
+# 1. 系統設定與資料庫初始化 (同時支援 Excel 與 CSV)
+# ==========================================
+BASE_DIR = r"E:\python\MarkSix"  
+CSV_PATH = os.path.join(BASE_DIR, "marksix_history.csv")
+EXCEL_PATH = os.path.join(BASE_DIR, "marksix_history.xlsx")
+
+if not os.path.exists(BASE_DIR): 
+    os.makedirs(BASE_DIR, exist_ok=True)
+
+def load_history_df():
+    if os.path.exists(EXCEL_PATH):
+        try:
+            return pd.read_excel(EXCEL_PATH)
+        except Exception:
+            pass
+    if os.path.exists(CSV_PATH):
+        try:
+            return pd.read_csv(CSV_PATH)
+        except Exception:
+            pass
+    return pd.DataFrame(columns=['DrawNo', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'Special'])
+
+def save_history_df(df):
+    df = df.drop_duplicates(subset=['DrawNo'], keep='last').tail(200)
+    df.to_csv(CSV_PATH, index=False)
+    try:
+        df.to_excel(EXCEL_PATH, index=False)
+    except Exception:
+        pass
+
+save_history_df(load_history_df())
+
+st.set_page_config(page_title="Mark Six AI Pro - 生肖 Excel 版", layout="wide", page_icon="🍀")
+st.title("🍀 終極六合彩 AI 多模型預測系統 (生肖 Excel 管理版)")
+
+st.info("⚠️ **系統免責聲明**：根據數學 nCr 計算，六合彩中頭獎機率為 1/13,983,816。期望值通常為負數，每次攪珠皆為獨立事件，本 AI 預測僅供參考，請量力而為。")
+
+# ==========================================
+# 2. 生肖與五行對照表
+# ==========================================
+ZODIAC_ORDER = ["鼠", "牛", "虎", "兔", "龍", "蛇", "馬", "羊", "猴", "雞", "狗", "豬"]
+
+SAN_HE = {
+    "鼠": ["猴", "龍"], "牛": ["蛇", "雞"], "虎": ["馬", "狗"], "兔": ["羊", "豬"],
+    "龍": ["猴", "鼠"], "蛇": ["雞", "牛"], "馬": ["虎", "狗"], "羊": ["兔", "豬"],
+    "猴": ["鼠", "龍"], "雞": ["蛇", "牛"], "狗": ["虎", "馬"], "豬": ["兔", "羊"]
+}
+
+LIU_HE = {
+    "鼠": "牛", "牛": "鼠", "虎": "豬", "兔": "狗",
+    "龍": "雞", "雞": "龍", "蛇": "猴", "猴": "蛇",
+    "馬": "羊", "羊": "馬"
+}
+
+LIU_CHONG = {
+    "鼠": "馬", "牛": "羊", "虎": "猴", "兔": "雞",
+    "龍": "狗", "蛇": "豬", "馬": "鼠", "羊": "牛",
+    "猴": "虎", "雞": "兔", "狗": "龍", "豬": "蛇"
+}
+
+ZODIAC_NUMBERS = {z: [] for z in ZODIAC_ORDER}
+for num in range(1, 50):
+    z_name = ZODIAC_ORDER[(num - 1) % 12]
+    ZODIAC_NUMBERS[z_name].append(num)
+
+WUXING_TAILS = {
+    "金": [4, 9], "木": [3, 8], "水": [1, 6], "火": [2, 7], "土": [0, 5]
+}
+
+# ==========================================
+# 3. 預測核心模型
+# ==========================================
+def get_zodiac_forecast(main_zodiac, wuxing_pref, period):
+    san_he = SAN_HE.get(main_zodiac, [])
+    liu_he = LIU_HE.get(main_zodiac, "")
+    chong = LIU_CHONG.get(main_zodiac, "")
+    
+    fav_zodiacs = [main_zodiac] + san_he + ([liu_he] if liu_he else [])
+    chong_nums = set(ZODIAC_NUMBERS.get(chong, []))
+    
+    valid_pool = [n for n in range(1, 50) if n not in chong_nums]
+    
+    df = load_history_df()
+    freq = {}
+    if len(df) > 0 and period > 0:
+        subset = df.tail(min(period, len(df)))
+        all_nums = subset[['N1', 'N2', 'N3', 'N4', 'N5', 'N6']].values.flatten()
+        freq = pd.Series(all_nums).value_counts().to_dict()
+        
+    weights = {}
+    for num in valid_pool:
+        w = 1.0
+        for z in fav_zodiacs:
+            if num in ZODIAC_NUMBERS.get(z, []):
+                w += 1.5
+        if wuxing_pref in WUXING_TAILS and (num % 10 in WUXING_TAILS[wuxing_pref]):
+            w += 2.0
+        if period > 0:
+            w += (freq.get(num, 0) * 0.3)
+        weights[num] = w
+        
+    attempts = 0
+    while attempts < 2000:
+        attempts += 1
+        picked = random.choices(list(weights.keys()), weights=list(weights.values()), k=10)
+        picked = list(set(picked))
+        if len(picked) >= 6:
+            candidate = sorted(picked[:6])
+            odds = sum(1 for n in candidate if n % 2 != 0)
+            bigs = sum(1 for n in candidate if n >= 25)
+            if (2 <= odds <= 4) and (2 <= bigs <= 4):
+                return candidate, san_he, liu_he, chong
+                
+    return sorted(random.sample(valid_pool, 6)), san_he, liu_he, chong
+
+# ==========================================
+# 4. 網頁介面 (Streamlit UI)
+# ==========================================
+col1, col2 = st.columns([6, 7])
+
+with col1:
+    st.subheader("🤖 AI 多模型選號策略")
+    strategy = st.radio(
+        "選擇數據分析範圍:", 
+        ("1. 完全隨機選號 (盲抽)", "2. 近 50 期 (捕捉短期旺門動量)", "3. 近 200 期 (捕捉長期均值頻率)"),
+        index=2
+    )
+    
+    st.markdown("---")
+    st.subheader("🔮 生肖與五行玄學設定")
+    main_zodiac = st.selectbox("請選擇主要生肖:", ZODIAC_ORDER, index=0)
+    wuxing_pref = st.selectbox("選擇五行屬性偏好:", ["無偏好", "金 (尾數 4, 9)", "木 (尾數 3, 8)", "水 (尾數 1, 6)", "火 (尾數 2, 7)", "土 (尾數 0, 5)"])
+    wuxing_key = wuxing_pref.split(" ")[0] if " " in wuxing_pref else "無偏好"
+
+    if st.button("🚀 啟動 AI 生肖號碼預測"):
+        period = 0
+        if "50" in strategy: period = 50
+        elif "200" in strategy: period = 200
+        
+        with st.spinner("AI 模型正在分析生肖相沖與歷史數據..."):
+            result, san_he, liu_he, chong = get_zodiac_forecast(main_zodiac, wuxing_key, period)
+            
+        if result:
+            st.success("🎉 為您推薦的 1 組 6 個生肖投注號碼:")
+            st.markdown(f"**生肖關係**：主要生肖 **{main_zodiac}** | 三合 **{', '.join(san_he)}** | 六合 **{liu_he}** | 🛑 避開相沖 **{chong}**")
+            cols = st.columns(6)
+            for i, num in enumerate(result):
+                cols[i].metric(label=f"No. {i+1}", value=f"{num:02d}")
+
+with col2:
+    st.subheader("📥 餵養與管理六合彩 Excel 資料庫")
+    
+    # 1. 手動輸入
+    draw_no = st.text_input("期數 (例: 26/072)")
+    nums = st.text_input("6 個號碼 (以逗號分隔, 例: 6,14,22,28,42,45)")
+    spec = st.number_input("特別號", 1, 49, step=1)
+    
+    if st.button("💾 保存數據至 Excel/CSV"):
+        try:
+            n_list = [int(x.strip()) for x in nums.split(",")]
+            if len(n_list) == 6:
+                df = load_history_df()
+                new_row = pd.DataFrame([{'DrawNo': draw_no, 'N1': n_list[0], 'N2': n_list[1], 'N3': n_list[2], 'N4': n_list[3], 'N5': n_list[4], 'N6': n_list[5], 'Special': spec}])
+                df_updated = pd.concat([df, new_row], ignore_index=True)
+                save_history_df(df_updated)
+                st.success(f"期數 {draw_no} 更新成功！已寫入 Excel 檔。")
+            else:
+                st.warning("請確保輸入了剛好 6 個號碼。")
+        except Exception: 
+            st.error("輸入格式錯誤，請檢查號碼是否正確。")
+
+    st.markdown("---")
+    df_curr = load_history_df()
+    st.subheader(f"📊 目前資料庫共有 {len(df_curr)} 期紀錄")
+    st.dataframe(df_curr.tail(10), use_container_width=True)
