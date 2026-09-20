@@ -22,9 +22,29 @@ EXCEL_PATH = os.path.join(BASE_DIR, "marksix_history.xlsx")
 
 if not os.path.exists(BASE_DIR): 
     os.makedirs(BASE_DIR, exist_ok=True)
+
+def sort_df_by_drawno(df):
+    """針對期數 (DrawNo) 進行純數字解析與精確排序 (例如: 26/001 < 26/010 < 26/102)"""
+    if df.empty or 'DrawNo' not in df.columns:
+        return df
+    
+    def parse_key(val):
+        s = str(val).strip()
+        if '/' in s:
+            parts = s.split('/')
+            try:
+                return (int(parts[0]), int(parts[1]))
+            except ValueError:
+                pass
+        return (0, 0)
+
+    df['_sort_key'] = df['DrawNo'].apply(parse_key)
+    df = df.sort_values(by='_sort_key', ascending=True).reset_index(drop=True)
+    df = df.drop(columns=['_sort_key'])
+    return df
     
 def load_history_df():
-    """讀取並合併 Excel 與 CSV 資料庫，確保新資料不被舊檔案覆蓋"""
+    """讀取並合併 Excel 與 CSV 資料庫，依期數數字升序排序"""
     dfs = []
     if os.path.exists(EXCEL_PATH):
         try:
@@ -38,9 +58,10 @@ def load_history_df():
             pass
             
     if dfs:
-        # 合併所有資料來源並去重，保留最新輸入的紀錄
         combined = pd.concat(dfs, ignore_index=True)
-        return combined.drop_duplicates(subset=['DrawNo'], keep='last')
+        combined['DrawNo'] = combined['DrawNo'].astype(str).str.strip()
+        combined = combined.drop_duplicates(subset=['DrawNo'], keep='last')
+        return sort_df_by_drawno(combined)
         
     return pd.DataFrame(columns=['DrawNo', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'Special'])
 
@@ -66,15 +87,17 @@ def sync_to_github():
             st.warning(f"⚠️ GitHub 自動同步失敗: {e}")
 
 def save_history_df(df):
-    """同步儲存至 Excel (.xlsx) 與 CSV (.csv) 並進行遠端同步（無筆數上限限制）"""
+    """同步儲存至 Excel (.xlsx) 與 CSV (.csv)，確保排序正確並同步雲端"""
+    df['DrawNo'] = df['DrawNo'].astype(str).str.strip()
     df = df.drop_duplicates(subset=['DrawNo'], keep='last')
+    df = sort_df_by_drawno(df)
+    
     df.to_csv(CSV_PATH, index=False)
     try:
         df.to_excel(EXCEL_PATH, index=False)
     except Exception as e:
         st.warning(f"⚠️ Excel 檔案寫入提示: {e}")
         
-    # 自動同步回 GitHub 雲端倉庫
     sync_to_github()
 
 # 初始化資料庫
@@ -290,4 +313,4 @@ with col2:
     )
 
     # 數據表顯示
-    st.dataframe(df_display.tail(20), use_container_width=True)
+    st.dataframe(df_display, use_container_width=True)
