@@ -61,7 +61,7 @@ def fetch_marksix_data():
     final_df = final_df.rename(columns={'S1': 'Special'})
     result_df = final_df[['DrawNo', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'Special']].tail(200)
     
-    base_dir = r"E:\python\MarkSix"
+    base_dir = "."
     csv_path = os.path.join(base_dir, "marksix_history.csv")
     excel_path = os.path.join(base_dir, "marksix_history.xlsx")
     

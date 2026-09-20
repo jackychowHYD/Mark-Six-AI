@@ -6,6 +6,13 @@ import os
 import random
 import io
 
+# Try importing PyGithub for automated repository synchronization
+try:
+    import github
+    GITHUB_AVAILABLE = True
+except ImportError:
+    GITHUB_AVAILABLE = False
+
 # ==========================================
 # 1. 系統設定與資料庫初始化 (同時支援 Excel 與 CSV)
 # ==========================================
@@ -17,27 +24,58 @@ if not os.path.exists(BASE_DIR):
     os.makedirs(BASE_DIR, exist_ok=True)
     
 def load_history_df():
-    """優先讀取 Excel，若無則讀取 CSV"""
+    """讀取並合併 Excel 與 CSV 資料庫，確保新資料不被舊檔案覆蓋"""
+    dfs = []
     if os.path.exists(EXCEL_PATH):
         try:
-            return pd.read_excel(EXCEL_PATH)
+            dfs.append(pd.read_excel(EXCEL_PATH))
         except Exception:
             pass
     if os.path.exists(CSV_PATH):
         try:
-            return pd.read_csv(CSV_PATH)
+            dfs.append(pd.read_csv(CSV_PATH))
         except Exception:
             pass
+            
+    if dfs:
+        # 合併所有資料來源並去重，保留最新輸入的紀錄
+        combined = pd.concat(dfs, ignore_index=True)
+        return combined.drop_duplicates(subset=['DrawNo'], keep='last')
+        
     return pd.DataFrame(columns=['DrawNo', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'Special'])
 
+def sync_to_github():
+    """若設定了 GitHub Token，自動將最新 Excel 檔案同步回 GitHub 儲存庫"""
+    if GITHUB_AVAILABLE and "GITHUB_TOKEN" in st.secrets and "GITHUB_REPO" in st.secrets:
+        try:
+            g = github.Github(st.secrets["GITHUB_TOKEN"])
+            repo = g.get_repo(st.secrets["GITHUB_REPO"])
+            
+            with open(EXCEL_PATH, "rb") as f:
+                content_bytes = f.read()
+                
+            contents = repo.get_contents("marksix_history.xlsx")
+            repo.update_file(
+                path="marksix_history.xlsx",
+                message="🤖 Streamlit App Auto-Update Mark Six History",
+                content=content_bytes,
+                sha=contents.sha
+            )
+            st.toast("☁️ 已成功自動同步歷史紀錄至 GitHub 儲存庫！", icon="✅")
+        except Exception as e:
+            st.warning(f"⚠️ GitHub 自動同步失敗: {e}")
+
 def save_history_df(df):
-    """同步儲存至 Excel (.xlsx) 與 CSV (.csv)"""
-    df = df.drop_duplicates(subset=['DrawNo'], keep='last').tail(200)
+    """同步儲存至 Excel (.xlsx) 與 CSV (.csv) 並進行遠端同步（無筆數上限限制）"""
+    df = df.drop_duplicates(subset=['DrawNo'], keep='last')
     df.to_csv(CSV_PATH, index=False)
     try:
         df.to_excel(EXCEL_PATH, index=False)
     except Exception as e:
         st.warning(f"⚠️ Excel 檔案寫入提示: {e}")
+        
+    # 自動同步回 GitHub 雲端倉庫
+    sync_to_github()
 
 # 初始化資料庫
 df_init = load_history_df()
@@ -155,7 +193,6 @@ col1, col2 = st.columns((6, 7))
 with col1: 
     st.subheader("🤖 生肖五行與 AI 多模型選號策略") 
     
-    # 保留原本 3 個選項
     strategy = st.radio( 
         "選擇數據分析範圍:", 
         ("1. 完全隨機選號 (盲抽)", "2. 近 50 期 (捕捉短期旺門動量)", "3. 近 200 期 (捕捉長期均值頻率)"), 
@@ -184,7 +221,7 @@ with col1:
 
 with col2: 
     st.subheader("📥 餵養與管理六合彩 Excel 資料庫") 
-    st.caption("手動輸入或上傳 Excel/CSV 檔案更新開獎紀錄，保持近 50 期 / 近 200 期數據最新狀態") 
+    st.caption("手動輸入或上傳 Excel/CSV 檔案更新開獎紀錄，保持數據最新狀態") 
     
     # 手動輸入單期開獎結果
     with st.expander("📝 1. 手動輸入單期開獎結果", expanded=True):
@@ -253,4 +290,4 @@ with col2:
     )
 
     # 數據表顯示
-    st.dataframe(df_display.tail(10), use_container_width=True)
+    st.dataframe(df_display.tail(20), use_container_width=True)
