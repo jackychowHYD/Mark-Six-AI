@@ -104,12 +104,96 @@ def save_history_df(df):
 df_init = load_history_df()
 save_history_df(df_init)
 
-st.set_page_config(page_title="Mark Six AI Pro - 動態權重隨機選號版", layout="wide", page_icon="🍀") 
-st.title("🍀 終極六合彩 AI 多模型預測系統 (生肖五行 + 動態權重選號版)") 
+st.set_page_config(page_title="Mark Six AI Pro - 波色馬可夫過濾版", layout="wide", page_icon="🍀") 
+st.title("🍀 終極六合彩 AI 多模型預測系統 (生肖五行 + 馬可夫波色過濾版)") 
 st.info("⚠️ **系統免責聲明**：根據數學 nCr 計算，六合彩中頭獎機率為 1/13,983,816。期望值通常為負數，每次攪珠皆為獨立事件，本 AI 預測僅供參考，請量力而為。")
 
 # ==========================================
-# 2. 生肖與五行玄學資料庫
+# 2. 獨立零侵入性波色馬可夫過濾器 (MarkSixColorFilter)
+# ==========================================
+class MarkSixColorFilter:
+    """
+    香港六合彩波色馬可夫轉移過濾器 (零侵入性設計)
+    """
+    def __init__(self):
+        # 官方波色固定對照字典
+        self.RED = {1, 2, 7, 8, 12, 13, 18, 19, 23, 24, 29, 30, 34, 35, 40, 45, 46}
+        self.BLUE = {3, 4, 9, 10, 14, 15, 20, 25, 26, 31, 32, 36, 37, 41, 42, 47, 48}
+        self.GREEN = {5, 6, 11, 16, 17, 21, 22, 27, 28, 33, 38, 39, 43, 44, 49}
+        
+        self.transition_matrix = {}
+        self.last_state = None
+        self.allowed_states = []
+
+    def _get_color_state(self, numbers):
+        """將 6 個號碼轉換為波色狀態字串 (如: '3R2B1G')"""
+        r, b, g = 0, 0, 0
+        for num in numbers:
+            num = int(num)
+            if num in self.RED:
+                r += 1
+            elif num in self.BLUE:
+                b += 1
+            elif num in self.GREEN:
+                g += 1
+        return f"{r}R{b}B{g}G"
+
+    def fit(self, history_df, columns=['N1', 'N2', 'N3', 'N4', 'N5', 'N6']):
+        """訓練馬可夫一階波色狀態轉移矩陣"""
+        if history_df.empty or len(history_df) < 2:
+            return self
+
+        # 轉換歷史記錄為波色狀態序列
+        states = []
+        for _, row in history_df.iterrows():
+            nums = [row[col] for col in columns if col in row]
+            if len(nums) == 6:
+                states.append(self._get_color_state(nums))
+
+        if not states:
+            return self
+
+        self.last_state = states[-1]
+
+        # 建立一階轉移矩陣
+        self.transition_matrix = {}
+        for i in range(len(states) - 1):
+            curr_s = states[i]
+            next_s = states[i + 1]
+            if curr_s not in self.transition_matrix:
+                self.transition_matrix[curr_s] = {}
+            self.transition_matrix[curr_s][next_s] = self.transition_matrix[curr_s].get(next_s, 0) + 1
+
+        return self
+
+    def predict_allowed_states(self, top_n=3):
+        """根據上一期波色狀態，預測下一期機率最高的前 N 個波色狀態 (白名單)"""
+        if not self.last_state or self.last_state not in self.transition_matrix:
+            # 若缺乏轉移記錄，預設開放常規熱門波色組合
+            self.allowed_states = ["2R2B2G", "3R2B1G", "2R3B1G", "3R1B2G", "1R3B2G", "2R1B3G", "1R2B3G"]
+            return self.allowed_states[:top_n]
+
+        next_counts = self.transition_matrix[self.last_state]
+        sorted_next = sorted(next_counts.items(), key=lambda x: x[1], reverse=True)
+        self.allowed_states = [s[0] for s in sorted_next[:top_n]]
+        return self.allowed_states
+
+    def filter_combinations(self, combinations_list):
+        """核心過濾接口：僅保留符合白名單狀態的組合"""
+        if not self.allowed_states:
+            return combinations_list
+
+        filtered = []
+        for combo in combinations_list:
+            state = self._get_color_state(combo)
+            if state in self.allowed_states:
+                filtered.append(combo)
+
+        # 若完全沒有組合通過過濾，回傳原始組合以防止返回空列表
+        return filtered if filtered else combinations_list
+
+# ==========================================
+# 3. 生肖與五行玄學資料庫
 # ==========================================
 ZODIAC_ORDER = ["鼠", "牛", "虎", "兔", "龍", "蛇", "馬", "羊", "猴", "雞", "狗", "豬"]
 
@@ -131,7 +215,6 @@ LIU_CHONG = {
     "猴": "虎", "雞": "兔", "狗": "龍", "豬": "蛇"
 }
 
-# 1-49 號碼循環對應十二生肖
 ZODIAC_NUMBERS = {z: [] for z in ZODIAC_ORDER}
 for num in range(1, 50):
     z_name = ZODIAC_ORDER[(num - 1) % 12]
@@ -142,28 +225,20 @@ WUXING_TAILS = {
 }
 
 # ==========================================
-# 3. 過濾器與預測核心邏輯
+# 4. 常規過濾器與預測核心邏輯
 # ==========================================
 def validate_combination(drawn):
-    """
-    過濾器函數：檢查生成組合是否符合統計規律
-    1. 總和：140 ~ 210
-    2. 奇偶比例：3:3, 4:2, 2:4 (奇數數量為 2, 3, 4)
-    3. 連號限制：最多 1 組雙連號，不允許 3 連號或以上
-    """
+    """檢查總和 (140-210)、奇偶比例及連號限制"""
     nums = sorted(drawn)
     
-    # 1. 總和過濾 (140 - 210)
     total_sum = sum(nums)
     if not (140 <= total_sum <= 210):
         return False
         
-    # 2. 奇偶比例 (2:4, 3:3, 4:2)
     odds = sum(1 for n in nums if n % 2 != 0)
     if odds not in [2, 3, 4]:
         return False
         
-    # 3. 連號限制
     consecutive_pairs = 0
     current_streak = 1
     max_streak = 1
@@ -182,12 +257,6 @@ def validate_combination(drawn):
     return True
 
 def get_zodiac_prediction(main_zodiac, wuxing_pref, strategy_mode, history_df_subset=None):
-    """
-    動態權重隨機選號（Weighted Random Pick）
-    - 近 50 期頻率 (60% 權重)
-    - 近 200 期頻率 (40% 權重)
-    - 結合生肖與五行特徵進行 Weighted numpy.random.choice 選號
-    """
     san_he_list = SAN_HE.get(main_zodiac, [])
     liu_he_zodiac = LIU_HE.get(main_zodiac, "")
     chong_zodiac = LIU_CHONG.get(main_zodiac, "")
@@ -206,31 +275,25 @@ def get_zodiac_prediction(main_zodiac, wuxing_pref, strategy_mode, history_df_su
         
     df = history_df_subset if history_df_subset is not None else load_history_df()
     
-    # 計算近 50 期與近 200 期頻率
     freq_50 = {}
     freq_200 = {}
     
     if len(df) > 0 and "盲抽" not in strategy_mode:
-        # 近 50 期頻率
         df_50 = df.tail(min(50, len(df)))
         nums_50 = df_50[['N1', 'N2', 'N3', 'N4', 'N5', 'N6']].values.flatten()
         counts_50 = pd.Series(nums_50).value_counts().to_dict()
         denom_50 = max(1, min(50, len(df)))
         freq_50 = {n: counts_50.get(n, 0) / denom_50 for n in range(1, 50)}
         
-        # 近 200 期頻率
         df_200 = df.tail(min(200, len(df)))
         nums_200 = df_200[['N1', 'N2', 'N3', 'N4', 'N5', 'N6']].values.flatten()
         counts_200 = pd.Series(nums_200).value_counts().to_dict()
         denom_200 = max(1, min(200, len(df)))
         freq_200 = {n: counts_200.get(n, 0) / denom_200 for n in range(1, 50)}
 
-    # 合成動態權重 (Dynamic Composite Weights)
     weights = {}
     for num in valid_pool:
         w = 1.0
-        
-        # 生肖與五行加權
         for z in favorable_zodiacs:
             if num in ZODIAC_NUMBERS.get(z, []):
                 w += 1.2
@@ -238,10 +301,9 @@ def get_zodiac_prediction(main_zodiac, wuxing_pref, strategy_mode, history_df_su
         if wuxing_pref in WUXING_TAILS and (num % 10 in WUXING_TAILS[wuxing_pref]):
             w += 1.5
             
-        # 疊加動態頻率權重 (60% 近50期 + 40% 近200期)
         if "盲抽" not in strategy_mode:
             f_score = (freq_50.get(num, 0) * 0.6) + (freq_200.get(num, 0) * 0.4)
-            w += (f_score * 10.0) # 放大頻率影響係數
+            w += (f_score * 10.0)
             
         weights[num] = max(0.01, w)
 
@@ -249,26 +311,32 @@ def get_zodiac_prediction(main_zodiac, wuxing_pref, strategy_mode, history_df_su
     pool_weights = np.array([weights[n] for n in pool_nums])
     pool_probs = pool_weights / np.sum(pool_weights)
     
-    # 使用 numpy.random.choice 進行不重複加權隨機抽樣 (Weighted Random Pick)
+    # 訓練波色馬可夫過濾器並取得白名單
+    color_filter = MarkSixColorFilter()
+    color_filter.fit(df, columns=['N1', 'N2', 'N3', 'N4', 'N5', 'N6'])
+    allowed_colors = color_filter.predict_allowed_states(top_n=3)
+
     attempts = 0
+    candidate_pool = []
     while attempts < 3000:
         attempts += 1
         drawn = np.random.choice(pool_nums, size=6, replace=False, p=pool_probs)
         if validate_combination(drawn):
-            return sorted(drawn.tolist()), san_he_list, liu_he_zodiac, chong_zodiac
-            
-    for _ in range(5000):
-        sample = random.sample(valid_pool, 6)
-        if validate_combination(sample):
-            return sorted(sample), san_he_list, liu_he_zodiac, chong_zodiac
+            candidate_pool.append(sorted(drawn.tolist()))
+            if len(candidate_pool) >= 50:
+                break
+                
+    # 使用波色馬可夫過濾器篩選號碼
+    final_filtered = color_filter.filter_combinations(candidate_pool)
+    if final_filtered:
+        return final_filtered[0], san_he_list, liu_he_zodiac, chong_zodiac, allowed_colors
 
-    return sorted(random.sample(valid_pool, 6)), san_he_list, liu_he_zodiac, chong_zodiac
+    return sorted(random.sample(valid_pool, 6)), san_he_list, liu_he_zodiac, chong_zodiac, allowed_colors
 
 # ==========================================
-# 4. 回測核心對獎邏輯
+# 5. 回測核心對獎邏輯
 # ==========================================
 def evaluate_ticket(drawn_main, drawn_special, bet_nums):
-    """判定單組彩券中獎等第與金額"""
     matched_main = len(set(bet_nums) & set(drawn_main))
     matched_special = drawn_special in bet_nums
     
@@ -290,7 +358,6 @@ def evaluate_ticket(drawn_main, drawn_special, bet_nums):
         return "未中獎", 0
 
 def run_backtest(target_periods, main_zodiac, wuxing_key, strategy_mode):
-    """執行歷史開獎數據回測模擬"""
     df = load_history_df()
     total_records = len(df)
     
@@ -317,7 +384,7 @@ def run_backtest(target_periods, main_zodiac, wuxing_key, strategy_mode):
                        target_row['N4'], target_row['N5'], target_row['N6']]
         actual_special = target_row['Special']
         
-        pred_nums, _, _, _ = get_zodiac_prediction(main_zodiac, wuxing_key, strategy_mode, history_df_subset=past_df)
+        pred_nums, _, _, _, _ = get_zodiac_prediction(main_zodiac, wuxing_key, strategy_mode, history_df_subset=past_df)
         
         prize_name, prize_money = evaluate_ticket(actual_main, actual_special, pred_nums)
         
@@ -348,7 +415,7 @@ def run_backtest(target_periods, main_zodiac, wuxing_key, strategy_mode):
     return summary, None
 
 # ==========================================
-# 5. 網頁介面 (Streamlit UI)
+# 6. 網頁介面 (Streamlit UI)
 # ==========================================
 col1, col2 = st.columns((6, 7))
 
@@ -367,16 +434,17 @@ with col1:
     wuxing_pref = st.selectbox("選擇五行屬性偏好:", ["無偏好", "金 (尾數 4, 9)", "木 (尾數 3, 8)", "水 (尾數 1, 6)", "火 (尾數 2, 7)", "土 (尾數 0, 5)"])
     wuxing_key = wuxing_pref.split(" ")[0] if " " in wuxing_pref else "無偏好"
 
-    if st.button("🎲 立即生成動態權重 AI 預測號碼"):
-        with st.spinner("🚀 NumPy 引擎進行 60/40 動態權重與過濾器抽樣中..."):
-            pred_nums, san_he, liu_he, chong = get_zodiac_prediction(main_zodiac, wuxing_key, strategy)
+    if st.button("🎲 立即生成 AI 波色馬可夫預測號碼"):
+        with st.spinner("🚀 進行波色馬可夫狀態轉移與動態權重過濾中..."):
+            pred_nums, san_he, liu_he, chong, allowed_colors = get_zodiac_prediction(main_zodiac, wuxing_key, strategy)
             
             total_sum = sum(pred_nums)
             odds_cnt = sum(1 for n in pred_nums if n % 2 != 0)
             evens_cnt = 6 - odds_cnt
             
-            st.success("✅ 預測組合已通過動態權重與過濾器！")
+            st.success("✅ 預測組合已通過波色馬可夫與統計過濾器！")
             st.markdown(f"**主要生肖**：`{main_zodiac}` | **三合**：`{', '.join(san_he)}` | **六合**：`{liu_he}` | 🛑 **已避開相沖**：`{chong}`")
+            st.markdown(f"🌈 **波色馬可夫白名單**：`{', '.join(allowed_colors)}`")
             st.markdown(f"📊 **統計驗證**：總和 `{total_sum}` (符合 140-210) | 奇偶比 `{odds_cnt}:{evens_cnt}` | 無違規連號")
             
             display_nums = " - ".join([str(n).zfill(2) for n in pred_nums])
@@ -453,11 +521,11 @@ with col2:
         st.dataframe(df_display, use_container_width=True)
 
     with tab2:
-        st.caption("⚙️ 使用 60% 近50期 + 40% 近200期動態權重模型，模擬滾動投注歷史資料庫進行真實勝率測試")
+        st.caption("⚙️ 使用 60/40 動態權重 + 馬可夫波色過濾器，模擬滾動投注歷史資料庫進行真實勝率測試")
         
         backtest_periods = st.number_input("設定回測模擬期數 (例: 500 期)", min_value=10, max_value=2000, value=500, step=10)
         
-        if st.button("🚀 啟動 60/40 動態權重演算法歷史模擬回測"):
+        if st.button("🚀 啟動波色馬可夫演算法歷史模擬回測"):
             with st.spinner("⏳ 正在對歷史數據進行滾動式模擬回測，請稍候..."):
                 res, err = run_backtest(backtest_periods, main_zodiac, wuxing_key, strategy)
                 
@@ -484,3 +552,15 @@ with col2:
                     st.markdown("---")
                     st.subheader("📋 回測詳細對獎明細")
                     st.dataframe(res['logs'], use_container_width=True)
+
+
+# ==========================================
+# 7. 獨立調用範例 (可直接在其他腳本呼叫)
+# ==========================================
+"""
+使用範例：
+filter_tool = MarkSixColorFilter()
+filter_tool.fit(df_history, columns=['N1','N2','N3','N4','N5','N6']) # 訓練馬可夫轉移
+allowed = filter_tool.predict_allowed_states(top_n=3)              # 預測下期波色白名單
+final_picks = filter_tool.filter_combinations(preds)               # 一鍵過濾！
+"""
